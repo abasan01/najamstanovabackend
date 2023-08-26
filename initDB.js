@@ -3,7 +3,6 @@ import "dotenv/config";
 
 export default () => {
     mongoose
-
         .connect(String(process.env.MONGODB_URI), {
             dbName: process.env.DB_NAME,
             user: process.env.DB_USER,
