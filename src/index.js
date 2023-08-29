@@ -4,7 +4,9 @@ import cors from "cors"
 import mongoose from "mongoose"
 import Test from "../Models/Test.js"
 import Ad from "../Models/Ad.js"
+import User from "../Models/User.js"
 import jwt from "jsonwebtoken"
+import auth from "./auth.js"
 
 /* Konstante za spajanje */
 const app = express()
@@ -55,7 +57,6 @@ app.get('/get-tests', async (req, res) => {
 
 app.get("/ads", async (req, res) => {
     try {
-        /* Podaci za filtriranje oglasa */
         const filters = {
             location: new RegExp(String(req.query.location), "i"),
             price: {
@@ -63,8 +64,8 @@ app.get("/ads", async (req, res) => {
                 max: req.query.maxPrice || null,
             },
             rooms: {
-                min: req.query.rooms || null,
-                max: req.query.rooms || null,
+                min: req.query.minRooms || null,
+                max: req.query.maxRooms || null,
             },
             surface: {
                 min: req.query.minSurface || null,
@@ -75,9 +76,9 @@ app.get("/ads", async (req, res) => {
             smoking: req.query.smoking || null,
             season: req.query.season || null,
             furnished: req.query.furnished || null,
-            floor: {
-                min: req.query.minFloor || null,
-                max: req.query.maxFloor || null,
+            floors: {
+                min: req.query.minFloors || null,
+                max: req.query.maxFloors || null,
             },
             lift: req.query.lift || null,
         }
@@ -97,9 +98,12 @@ app.get("/ads", async (req, res) => {
         if (filters.smoking) query.where("smoking").equals(true)
         if (filters.season) query.where("season").equals(true)
         if (filters.furnished) query.where("furnished").equals(true)
-        if (filters.floor.min) query.where("floor").gte(Number(filters.floor.min))
-        if (filters.floor.max) query.where("floor").lte(Number(filters.floor.max))
+        if (filters.floors.min) query.where("floors").gte(Number(filters.floors.min))
+        if (filters.floors.max) query.where("floors").lte(Number(filters.floors.max))
         if (filters.lift) query.where("lift").equals(true)
+
+        console.log("query: ", query)
+        console.log("filters: ", filters)
 
         const ads = await query.exec();
         res.json(ads)
@@ -114,6 +118,7 @@ app.get("/ads", async (req, res) => {
 /* GET za specifični oglas */
 app.get("/ads/:id", async (req, res) => {
     try {
+        /* Podaci za filtriranje oglasa */
         const id = req.params.id
         const ad = await Ad.findById(id)
         res.json(ad)
@@ -129,9 +134,11 @@ app.get("/ads/:id", async (req, res) => {
 
 /* POST za oglas */
 /* napomena dodati auth */
-app.post("/upload", async (req, res) => {
+app.post("/upload", [auth.verify], async (req, res) => {
     try {
+        console.log("/upload")
         const body = req.body
+        console.log("body: ", body)
         const ads = await Ad.create(
             body
         )
@@ -225,12 +232,50 @@ app.post("/messages/:id", async (req, res) => {
 
 /* Dio za user */
 
-/* POST za login */
-app.post("/login", async (req, res) => {
+/* PATCH za login */
+app.patch("/login", async (req, res) => {
     try {
-        const user = req.body
-        res.json(user)
+        /* Tražimo korisnika */
+        const user = await User.findOne({
+            email: req.body.email
+        });
+        /* Provjera u slučaju da ne nađemo korisnika */
+        if (!user) {
+            throw new Error("Can't find user!")
+        }
+        console.log("user: ", user)
+
+        const authCheck = await auth.authenticateUser(user, req.body.pass) /* Provjerava ako je lozinka točna, dobivamo nazad token */
+        user.status = true,
+            await user.save() /* Postavljamo da je korisnik online */
+        res.json(authCheck)
     } catch (e) {
+        console.error(e.message)
+        res.status(500).send({
+            error: e.message
+        })
+    }
+})
+
+/* PATCH za logout */
+app.patch("/logout", async (req, res) => {
+    try {
+        console.log("user: ", req.body)
+        /* Tražimo korisnika */
+        const user = await User.findOne({
+            email: req.body.email
+        });
+        /* Provjera u slučaju da ne nađemo korisnika */
+        if (!user) {
+            throw new Error("Can't find user!")
+        }
+        console.log("user: ", user)
+
+        user.status = false,
+            await user.save() /* Postavljamo da je korisnik offline */
+        res.json("success")
+    } catch (e) {
+        console.error(e.message)
         res.status(500).send({
             error: e.message
         })
@@ -241,8 +286,10 @@ app.post("/login", async (req, res) => {
 app.post("/signup", async (req, res) => {
     try {
         const newUser = req.body
-        res.json(newUser)
+        const savedDoc = await auth.registerUser(newUser)
+        res.json(savedDoc)
     } catch (e) {
+        console.error(e.message)
         res.status(500).send({
             error: e.message
         })

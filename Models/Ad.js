@@ -6,6 +6,10 @@ const adSchema = new mongoose.Schema({
         required: true,
         minLength: 10,
     },
+    url: {
+        type: [String],
+        required: true,
+    },
     description: {
         type: String,
         required: true,
@@ -51,7 +55,7 @@ const adSchema = new mongoose.Schema({
         type: Boolean,
         required: true,
     },
-    floor: {
+    floors: {
         type: Number,
         required: true,
         min: 0
@@ -67,6 +71,6 @@ const adSchema = new mongoose.Schema({
     }
 });
 
-const Test = mongoose.model('Ad', adSchema);
+const Ad = mongoose.model('Ad', adSchema);
 
-export default Test;
+export default Ad;
