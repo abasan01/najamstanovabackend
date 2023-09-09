@@ -7,8 +7,16 @@ const adSchema = new mongoose.Schema({
         minLength: 10,
     },
     url: {
-        type: [String],
-        required: true,
+        type: [{
+            name: {
+                type: String,
+                required: true,
+            },
+            url: {
+                type: String,
+                required: true,
+            },
+        }, ],
     },
     description: {
         type: String,
@@ -60,6 +68,11 @@ const adSchema = new mongoose.Schema({
         required: true,
         min: 0
     },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    },
     createdAt: {
         type: Date,
         immutable: true,
@@ -69,6 +82,11 @@ const adSchema = new mongoose.Schema({
         type: Date,
         default: () => Date.now(),
     }
+});
+
+adSchema.pre("save", function (next) {
+    this.updatedAt = Date.now();
+    next();
 });
 
 const Ad = mongoose.model('Ad', adSchema);

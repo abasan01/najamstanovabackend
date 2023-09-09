@@ -102,10 +102,7 @@ app.get("/ads", async (req, res) => {
         if (filters.floors.max) query.where("floors").lte(Number(filters.floors.max))
         if (filters.lift) query.where("lift").equals(true)
 
-        console.log("query: ", query)
-        console.log("filters: ", filters)
-
-        const ads = await query.exec();
+        const ads = await query.populate("createdBy").exec();
         res.json(ads)
     } catch (e) {
         console.error(e.message)
@@ -118,9 +115,9 @@ app.get("/ads", async (req, res) => {
 /* GET za specifični oglas */
 app.get("/ads/:id", async (req, res) => {
     try {
-        /* Podaci za filtriranje oglasa */
         const id = req.params.id
-        const ad = await Ad.findById(id)
+        const ad = await Ad.findById(id).populate("createdBy");
+        console.log("ad: ", ad)
         res.json(ad)
     } catch (e) {
         console.error(e)
@@ -133,10 +130,13 @@ app.get("/ads/:id", async (req, res) => {
 /* Izrada oglasa */
 
 /* POST za oglas */
-/* napomena dodati auth */
 app.post("/upload", [auth.verify], async (req, res) => {
     try {
         console.log("/upload")
+        const user = await User.findOne({
+            email: req.body.createdBy
+        });
+        req.body.createdBy = user
         const body = req.body
         console.log("body: ", body)
         const ads = await Ad.create(
@@ -152,11 +152,20 @@ app.post("/upload", [auth.verify], async (req, res) => {
 })
 
 /* PATCH za oglas */
-/* napomena dodati auth */
-app.patch("/upload/:id", async (req, res) => {
+app.patch("/upload/:id", [auth.verify], async (req, res) => {
     try {
-        const body = req.body
+        console.log("/upload patch")
         const id = req.params.id
+
+        const user = await User.findOne({
+            email: req.body.createdBy
+        });
+        req.body.createdBy = user
+
+        const body = req.body
+
+        const ads = await Ad.findByIdAndUpdate(id, body)
+
 
         console.log("body: ", body)
         res.json(`body: ${body}, id: ${id}`)
@@ -288,6 +297,18 @@ app.post("/signup", async (req, res) => {
         const newUser = req.body
         const savedDoc = await auth.registerUser(newUser)
         res.json(savedDoc)
+    } catch (e) {
+        console.error(e.message)
+        res.status(500).send({
+            error: e.message
+        })
+    }
+})
+
+/* GET za provjeru autorizacije */
+app.get("/auth", [auth.verify], async (req, res) => {
+    try {
+        res.json(true)
     } catch (e) {
         console.error(e.message)
         res.status(500).send({
