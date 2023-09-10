@@ -1,12 +1,14 @@
 /* Importovi */
 import express from "express"
 import cors from "cors"
-import mongoose from "mongoose"
-import Test from "../Models/Test.js"
+import Chat from "../Models/Chat.js"
 import Ad from "../Models/Ad.js"
 import User from "../Models/User.js"
-import jwt from "jsonwebtoken"
 import auth from "./auth.js"
+import {
+    Server
+} from "socket.io"
+import http from "http"
 
 /* Konstante za spajanje */
 const app = express()
@@ -19,37 +21,7 @@ import connect from '../initDB.js';
 
 await connect()
 
-app.post('/add-test', async (req, res) => {
-    try {
-        const newData = {
-            name: "test",
-            age: 1
-        };
-        const createdData = await Test.create(newData);
 
-        console.log('New data inserted:', createdData);
-        res.status(201).json(createdData);
-    } catch (error) {
-        console.error('Error inserting data:', error.message);
-        res.status(500).json({
-            error: 'Internal Server Error',
-        });
-    }
-});
-
-app.get('/get-tests', async (req, res) => {
-    try {
-        const tests = await Test.find(); // Retrieve all documents
-
-        console.log('Retrieved tests:', tests);
-        res.status(200).json(tests);
-    } catch (error) {
-        console.error('Error retrieving tests:', error.message);
-        res.status(500).json({
-            error: 'Internal Server Error',
-        });
-    }
-});
 
 /* Glavna stranica */
 
@@ -194,13 +166,58 @@ app.delete("/upload/:id", async (req, res) => {
 
 /* Dio za poruke */
 
-/* GET za poruke */
-/* napomena dodati auth */
-app.get("/messages/:id", async (req, res) => {
+/* POST za poruke */
+app.post("/messages", async (req, res) => {
     try {
-        const id = req.params.id
+        console.log("req.body: ", req.body)
+        const user = await auth.userInfo(req)
+        const body = req.body
+        const data = await Chat.create({
+            message: {
+                text: body.message
+            },
+            users: [body.from, body.to],
+            // @ts-ignore
+            sender: user._id,
+        });
+        if (data) return res.json({
+            msg: "Uspijeh!"
+        })
+        return res.json({
+            msg: "Neuspijeh"
+        })
+    } catch (e) {
+        console.error(e)
+        res.status(500).json({
+            error: "Internal Server Error"
+        });
+    }
+})
 
-        res.json(`Poruke iz chata: ${id}`)
+/* GET za poruke */
+app.get("/messages", async (req, res) => {
+    try {
+        console.log(req.query)
+        const data = req.query
+        const messages = await Chat.find({
+                users: {
+                    $all: [data.from, data.to]
+                }
+            })
+            .sort({
+                updatedAt: 1
+            })
+        console.log(messages)
+
+        const mappedMessages = messages.map((item) => {
+            return {
+                id: item._id,
+                type: item.sender.toString() === data.from,
+                // @ts-ignore
+                message: item.message.text,
+            }
+        })
+        return res.json(mappedMessages)
     } catch (e) {
         console.error(e)
         res.status(500).json({
@@ -211,10 +228,11 @@ app.get("/messages/:id", async (req, res) => {
 
 /* GET za listu korisnika s kojim se dopisujemo */
 /* napomena dodati auth */
-app.get("/messages/", async (req, res) => {
+app.get("/conversations", [auth.verify], async (req, res) => {
     try {
-        const conversations = "test"
-        res.json(`Lista korisnika: ${conversations}`)
+        const userId = await auth.userInfo(req)
+        const user = await User.findById(userId).populate("conversations")
+        res.json(user)
     } catch (e) {
         console.error(e)
         res.status(500).json({
@@ -223,21 +241,6 @@ app.get("/messages/", async (req, res) => {
     }
 })
 
-/* POST za poruke */
-/* napomena dodati auth */
-app.post("/messages/:id", async (req, res) => {
-    try {
-        const id = req.params.id
-        const message = req.body
-
-        res.json(`Poruke iz chata: ${id}, message: ${message}`)
-    } catch (e) {
-        console.error(e)
-        res.status(500).json({
-            error: "Internal Server Error"
-        });
-    }
-})
 
 /* Dio za user */
 
@@ -296,6 +299,7 @@ app.post("/signup", async (req, res) => {
     try {
         const newUser = req.body
         const savedDoc = await auth.registerUser(newUser)
+        console.log(savedDoc)
         res.json(savedDoc)
     } catch (e) {
         console.error(e.message)
@@ -317,5 +321,38 @@ app.get("/auth", [auth.verify], async (req, res) => {
     }
 })
 
+const httpServer = app.listen(port, () => {
+    console.log(`Server listening on port ${port}`)
+});
 
-app.listen(port, () => console.log(`Slušam na portu ${port}!`))
+const io = new Server(httpServer, {
+    cors: {
+        origin: "http://localhost:8080",
+        credentials: true,
+    },
+});
+
+global.onlineUsers = new Map();
+
+io.on("connection", (socket) => {
+    io.emit('my broadcast', `server`);
+    console.log('a user connected');
+    global.chatSocket = socket;
+    socket.on("add-user", (userId) => {
+        global.onlineUsers.set(userId, socket.id);
+    });
+
+    socket.on("send-msg", (data) => {
+        console.log("data: ", data)
+        const sendUserSocket = global.onlineUsers.get(data.to);
+        console.log("from: ", global.onlineUsers.get(data.from))
+        console.log("to: ", global.onlineUsers.get(data.to))
+        if (sendUserSocket) {
+            io.to(sendUserSocket).emit("msg-recieve", data);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('user disconnected');
+    });
+});

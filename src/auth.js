@@ -13,7 +13,7 @@ export default {
         }
 
         try {
-            await User.create(doc)
+            return await User.create(doc)
         } catch (e) {
             throw new Error(e)
         }
@@ -60,6 +60,16 @@ export default {
             }
         } catch (e) {
             return res.status(403).send(e.message);
+        }
+    },
+    async userInfo(req) {
+        try {
+            const header = req.headers.authorization
+            const token = header.split(" ")
+            const decoded = jwt.decode(token[1])
+            return decoded
+        } catch (e) {
+            throw new Error(e)
         }
     }
 }

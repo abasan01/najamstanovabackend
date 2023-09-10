@@ -84,7 +84,9 @@ const adSchema = new mongoose.Schema({
     }
 });
 
+// @ts-ignore
 adSchema.pre("save", function (next) {
+    // @ts-ignore
     this.updatedAt = Date.now();
     next();
 });

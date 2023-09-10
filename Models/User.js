@@ -14,9 +14,10 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    conversations: {
-        type: [String]
-    },
+    conversations: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    }],
     createdAt: {
         type: Date,
         immutable: true,
