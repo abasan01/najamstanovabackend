@@ -74,7 +74,9 @@ app.get("/ads", async (req, res) => {
         if (filters.floors.max) query.where("floors").lte(Number(filters.floors.max))
         if (filters.lift) query.where("lift").equals(true)
 
-        const ads = await query.populate("createdBy").exec();
+        const ads = await query.sort({
+            updatedAt: -1
+        }).populate("createdBy").exec();
         res.json(ads)
     } catch (e) {
         console.error(e.message)
@@ -126,21 +128,13 @@ app.post("/upload", [auth.verify], async (req, res) => {
 /* PATCH za oglas */
 app.patch("/upload/:id", [auth.verify], async (req, res) => {
     try {
-        console.log("/upload patch")
         const id = req.params.id
-
-        const user = await User.findOne({
-            email: req.body.createdBy
-        });
-        req.body.createdBy = user
-
         const body = req.body
 
         const ads = await Ad.findByIdAndUpdate(id, body)
+        ads.save()
 
-
-        console.log("body: ", body)
-        res.json(`body: ${body}, id: ${id}`)
+        res.json(ads)
     } catch (e) {
         console.error(e)
         res.status(500).json({
@@ -155,7 +149,9 @@ app.delete("/upload/:id", async (req, res) => {
     try {
         const id = req.params.id
 
-        res.json(`Oglas obrisan: ${id}`)
+        await Ad.findByIdAndDelete(id)
+
+        res.json(`Oglas obrisan`)
     } catch (e) {
         console.error(e)
         res.status(500).json({
@@ -215,6 +211,7 @@ app.get("/messages", async (req, res) => {
                 type: item.sender.toString() === data.from,
                 // @ts-ignore
                 message: item.message.text,
+                createdAt: item.createdAt
             }
         })
         return res.json(mappedMessages)
@@ -227,7 +224,6 @@ app.get("/messages", async (req, res) => {
 })
 
 /* GET za listu korisnika s kojim se dopisujemo */
-/* napomena dodati auth */
 app.get("/conversations", [auth.verify], async (req, res) => {
     try {
         const userId = await auth.userInfo(req)
@@ -241,6 +237,36 @@ app.get("/conversations", [auth.verify], async (req, res) => {
     }
 })
 
+/* PATCH za dodavanje novog korisnika za dopisivanje */
+app.patch("/conversations", [auth.verify], async (req, res) => {
+    try {
+        const userId = await auth.userInfo(req)
+        const user = await User.findById(userId).populate("conversations")
+
+        const newConvo = req.body._id
+
+        // @ts-ignore
+        console.log("user.conversations: ", user.conversations)
+        console.log("newConvo: ", newConvo)
+
+        if (user.conversations.some((conversation) => conversation._id.toString() === newConvo)) {
+            res.json(true)
+        } else {
+            user.conversations.push(newConvo)
+            const newUser = await User.findById(newConvo).populate("conversations")
+            newUser.conversations.push(user._id)
+            user.save()
+            newUser.save()
+            res.json(true)
+
+        }
+    } catch (e) {
+        console.error(e)
+        res.status(500).json({
+            error: "Internal Server Error"
+        });
+    }
+})
 
 /* Dio za user */
 
