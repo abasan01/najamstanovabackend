@@ -6,13 +6,12 @@ import "dotenv/config";
 
 export default {
     async registerUser(userData) {
-
-        const doc = {
-            email: userData.email,
-            pass: await bcrypt.hash(userData.pass, 8)
-        }
-
         try {
+            const doc = {
+                email: userData.email,
+                pass: await bcrypt.hash(userData.pass, 8)
+            }
+
             return await User.create(doc)
         } catch (e) {
             throw new Error(e)
@@ -20,24 +19,28 @@ export default {
     },
 
     async authenticateUser(user, pass) {
+        try {
 
-        if (user && user.pass && (await bcrypt.compare(pass, user.pass))) {
+            if (user && user.pass && (await bcrypt.compare(pass, user.pass))) {
 
-            const payload = {
-                _id: user._id,
+                const payload = {
+                    _id: user._id,
+                }
+
+                const token = jwt.sign(payload, String(process.env.JWT_SECRET), {
+                    algorithm: "HS512",
+                    expiresIn: "1 day"
+                })
+                return {
+                    token,
+                    email: user.email
+                }
+
+            } else {
+                throw new Error("Neispravni podaci")
             }
-
-            const token = jwt.sign(payload, String(process.env.JWT_SECRET), {
-                algorithm: "HS512",
-                expiresIn: "1 day"
-            })
-            return {
-                token,
-                email: user.email
-            }
-
-        } else {
-            throw new Error("Can't authenticate")
+        } catch (e) {
+            throw new Error(e)
         }
     },
     async verify(req, res, next) {

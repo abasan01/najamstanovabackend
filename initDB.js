@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import "dotenv/config";
 
 export default () => {
-    console.log(process.env.MONGODB_URI, process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASS)
     mongoose
         .connect(String(process.env.MONGODB_URI), {
             dbName: process.env.DB_NAME,

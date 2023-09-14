@@ -8,8 +8,9 @@ import User from "../Models/User.js"
 import auth from "./auth.js"
 import {
     Server
-} from "socket.io"
-import http from "http"
+}
+from "socket.io"
+import connect from '../initDB.js';
 
 /* Konstante za spajanje */
 const app = express()
@@ -18,10 +19,7 @@ const port = 3000
 app.use(cors())
 app.use(express.json())
 
-import connect from '../initDB.js';
-
 await connect()
-
 
 
 /* Glavna stranica */
@@ -77,7 +75,7 @@ app.get("/ads", async (req, res) => {
 
         const ads = await query.sort({
             updatedAt: -1
-        }).populate("createdBy").exec();
+        }).populate("createdBy").select("-pass").exec();
         res.json(ads)
     } catch (e) {
         console.error(e.message)
@@ -91,8 +89,7 @@ app.get("/ads", async (req, res) => {
 app.get("/ads/:id", async (req, res) => {
     try {
         const id = req.params.id
-        const ad = await Ad.findById(id).populate("createdBy");
-        console.log("ad: ", ad)
+        const ad = await Ad.findById(id).populate("createdBy").select("-pass");
         res.json(ad)
     } catch (e) {
         console.error(e)
@@ -107,17 +104,13 @@ app.get("/ads/:id", async (req, res) => {
 /* POST za oglas */
 app.post("/upload", [auth.verify], async (req, res) => {
     try {
-        console.log("/upload")
-        const user = await User.findOne({
-            email: req.body.createdBy
-        });
+        const user = await auth.userInfo(req)
         req.body.createdBy = user
         const body = req.body
-        console.log("body: ", body)
         const ads = await Ad.create(
             body
         )
-        res.json(`ads: ${ads}`)
+        res.json(ads)
     } catch (e) {
         console.error(e)
         res.status(500).json({
@@ -145,8 +138,7 @@ app.patch("/upload/:id", [auth.verify], async (req, res) => {
 })
 
 /* DELETE za oglas */
-/* napomena dodati auth */
-app.delete("/upload/:id", async (req, res) => {
+app.delete("/upload/:id", [auth.verify], async (req, res) => {
     try {
         const id = req.params.id
 
@@ -164,9 +156,8 @@ app.delete("/upload/:id", async (req, res) => {
 /* Dio za poruke */
 
 /* POST za poruke */
-app.post("/messages", async (req, res) => {
+app.post("/messages", [auth.verify], async (req, res) => {
     try {
-        console.log("req.body: ", req.body)
         const user = await auth.userInfo(req)
         const body = req.body
         const data = await Chat.create({
@@ -177,12 +168,8 @@ app.post("/messages", async (req, res) => {
 
             sender: user._id,
         });
-        if (data) return res.json({
-            msg: "Uspijeh!"
-        })
-        return res.json({
-            msg: "Neuspijeh"
-        })
+        if (data) return res.json(true)
+        return res.json(false)
     } catch (e) {
         console.error(e)
         res.status(500).json({
@@ -192,9 +179,8 @@ app.post("/messages", async (req, res) => {
 })
 
 /* GET za poruke */
-app.get("/messages", async (req, res) => {
+app.get("/messages", [auth.verify], async (req, res) => {
     try {
-        console.log(req.query)
         const data = req.query
         const messages = await Chat.find({
                 users: {
@@ -202,9 +188,8 @@ app.get("/messages", async (req, res) => {
                 }
             })
             .sort({
-                updatedAt: 1
+                createdAt: 1
             })
-        console.log(messages)
 
         const mappedMessages = messages.map((item) => {
             return {
@@ -227,9 +212,9 @@ app.get("/messages", async (req, res) => {
 /* GET za listu korisnika s kojim se dopisujemo */
 app.get("/conversations", [auth.verify], async (req, res) => {
     try {
-        const userId = await auth.userInfo(req)
-        const user = await User.findById(userId).populate("conversations")
-        res.json(user)
+        const user = await auth.userInfo(req)
+        const userConversations = await User.findById(user).populate("conversations").select("-pass")
+        res.json(userConversations)
     } catch (e) {
         console.error(e)
         res.status(500).json({
@@ -241,25 +226,20 @@ app.get("/conversations", [auth.verify], async (req, res) => {
 /* PATCH za dodavanje novog korisnika za dopisivanje */
 app.patch("/conversations", [auth.verify], async (req, res) => {
     try {
-        const userId = await auth.userInfo(req)
-        const user = await User.findById(userId).populate("conversations")
+        const user = await auth.userInfo(req)
+        const userConversations = await User.findById(user).populate("conversations").select("-pass")
 
-        const newConvo = req.body._id
+        const newConversationId = req.body._id
 
-
-        console.log("user.conversations: ", user.conversations)
-        console.log("newConvo: ", newConvo)
-
-        if (user.conversations.some((conversation) => conversation._id.toString() === newConvo)) {
+        if (userConversations.conversations.some((conversation) => conversation._id.toString() === newConversationId)) {
             res.json(true)
         } else {
-            user.conversations.push(newConvo)
-            const newUser = await User.findById(newConvo).populate("conversations")
-            newUser.conversations.push(user._id)
-            user.save()
-            newUser.save()
+            userConversations.conversations.push(newConversationId)
+            const newUser = await User.findById(newConversationId).populate("conversations").select("-pass")
+            newUser.conversations.push(user)
+            await userConversations.save()
+            await newUser.save()
             res.json(true)
-
         }
     } catch (e) {
         console.error(e)
@@ -271,8 +251,8 @@ app.patch("/conversations", [auth.verify], async (req, res) => {
 
 /* Dio za user */
 
-/* PATCH za login */
-app.patch("/login", async (req, res) => {
+/* POST za login */
+app.post("/login", async (req, res) => {
     try {
         /* Tražimo korisnika */
         const user = await User.findOne({
@@ -280,39 +260,11 @@ app.patch("/login", async (req, res) => {
         });
         /* Provjera u slučaju da ne nađemo korisnika */
         if (!user) {
-            throw new Error("Can't find user!")
+            throw new Error("Korisnik nije pronađen!")
         }
-        console.log("user: ", user)
 
         const authCheck = await auth.authenticateUser(user, req.body.pass) /* Provjerava ako je lozinka točna, dobivamo nazad token */
-        user.status = true,
-            await user.save() /* Postavljamo da je korisnik online */
         res.json(authCheck)
-    } catch (e) {
-        console.error(e.message)
-        res.status(500).send({
-            error: e.message
-        })
-    }
-})
-
-/* PATCH za logout */
-app.patch("/logout", async (req, res) => {
-    try {
-        console.log("user: ", req.body)
-        /* Tražimo korisnika */
-        const user = await User.findOne({
-            email: req.body.email
-        });
-        /* Provjera u slučaju da ne nađemo korisnika */
-        if (!user) {
-            throw new Error("Can't find user!")
-        }
-        console.log("user: ", user)
-
-        user.status = false,
-            await user.save() /* Postavljamo da je korisnik offline */
-        res.json("success")
     } catch (e) {
         console.error(e.message)
         res.status(500).send({
@@ -326,7 +278,6 @@ app.post("/signup", async (req, res) => {
     try {
         const newUser = req.body
         const savedDoc = await auth.registerUser(newUser)
-        console.log(savedDoc)
         res.json(savedDoc)
     } catch (e) {
         console.error(e.message)
@@ -362,24 +313,20 @@ const io = new Server(httpServer, {
 global.onlineUsers = new Map();
 
 io.on("connection", (socket) => {
-    io.emit('my broadcast', `server`);
-    console.log('a user connected');
-    global.chatSocket = socket;
+    console.log('Korisnik spojen');
     socket.on("add-user", (userId) => {
         global.onlineUsers.set(userId, socket.id);
     });
 
     socket.on("send-msg", (data) => {
-        console.log("data: ", data)
         const sendUserSocket = global.onlineUsers.get(data.to);
-        console.log("from: ", global.onlineUsers.get(data.from))
-        console.log("to: ", global.onlineUsers.get(data.to))
         if (sendUserSocket) {
             io.to(sendUserSocket).emit("msg-recieve", data);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('user disconnected');
+        socket.disconnect();
+        console.log('Korisnik odspojen');
     });
 });

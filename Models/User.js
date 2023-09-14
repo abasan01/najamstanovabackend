@@ -10,10 +10,6 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    status: {
-        type: Boolean,
-        default: false
-    },
     conversations: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
