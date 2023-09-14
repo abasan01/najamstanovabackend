@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* Importovi */
 import express from "express"
 import cors from "cors"
@@ -173,7 +174,7 @@ app.post("/messages", async (req, res) => {
                 text: body.message
             },
             users: [body.from, body.to],
-            // @ts-ignore
+
             sender: user._id,
         });
         if (data) return res.json({
@@ -209,7 +210,7 @@ app.get("/messages", async (req, res) => {
             return {
                 id: item._id,
                 type: item.sender.toString() === data.from,
-                // @ts-ignore
+
                 message: item.message.text,
                 createdAt: item.createdAt
             }
@@ -245,7 +246,7 @@ app.patch("/conversations", [auth.verify], async (req, res) => {
 
         const newConvo = req.body._id
 
-        // @ts-ignore
+
         console.log("user.conversations: ", user.conversations)
         console.log("newConvo: ", newConvo)
 

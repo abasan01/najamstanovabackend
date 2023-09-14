@@ -2,15 +2,13 @@ import mongoose from "mongoose";
 import "dotenv/config";
 
 export default () => {
+    console.log(process.env.MONGODB_URI, process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASS)
     mongoose
         .connect(String(process.env.MONGODB_URI), {
             dbName: process.env.DB_NAME,
             user: process.env.DB_USER,
             pass: process.env.DB_PASS,
         })
-        /* .connect("mongodb://localhost:27017", {
-            dbName: "test",
-        }) */
         .then(() => {
             console.log('Mongodb spojen....');
         })
